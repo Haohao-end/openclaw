@@ -4,7 +4,7 @@ import {
   isGatewayNonLoopbackBindMode,
   resolveGatewayPortWithDefault,
 } from "./gateway-control-ui-origins.js";
-import { resolveLegacyLocalOnboardingToolsProfile } from "./legacy-local-tools-profile.js";
+import { shouldMigrateLegacyLocalOnboardingToolsProfile } from "./legacy-local-tools-profile.js";
 import {
   ensureAgentEntry,
   ensureRecord,
@@ -102,12 +102,11 @@ export const LEGACY_CONFIG_MIGRATIONS_PART_3: LegacyConfigMigration[] = [
     id: "tools.profile.messaging->coding.local-onboarding",
     describe: "Restore coding tools.profile for legacy local onboarding installs",
     apply: (raw, changes) => {
-      const tools = getRecord(raw.tools);
-      if (!tools || tools.profile !== "messaging") {
+      if (!shouldMigrateLegacyLocalOnboardingToolsProfile(raw)) {
         return;
       }
-      const resolvedProfile = resolveLegacyLocalOnboardingToolsProfile(raw, tools.profile);
-      if (resolvedProfile !== "coding") {
+      const tools = getRecord(raw.tools);
+      if (!tools) {
         return;
       }
       tools.profile = "coding";

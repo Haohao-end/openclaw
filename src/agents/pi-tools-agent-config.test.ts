@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { migrateLegacyConfig } from "../config/legacy-migrate.js";
 import { createOpenClawCodingTools } from "./pi-tools.js";
 import type { SandboxDockerConfig } from "./sandbox.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
@@ -315,7 +316,7 @@ describe("Agent-specific tool filtering", () => {
     expect(toolNames).toEqual(["session_status"]);
   });
 
-  it("restores exec for legacy local onboarding messaging profiles", async () => {
+  it("restores exec after migrating a legacy local onboarding messaging profile", async () => {
     if (process.platform === "win32") {
       return;
     }
@@ -323,7 +324,7 @@ describe("Agent-specific tool filtering", () => {
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-legacy-profile-"));
     const outputPath = path.join(workspaceDir, "legacy-local-profile.txt");
     try {
-      const cfg: OpenClawConfig = {
+      const legacyConfig: OpenClawConfig = {
         gateway: {
           mode: "local",
         },
@@ -335,10 +336,25 @@ describe("Agent-specific tool filtering", () => {
         tools: {
           profile: "messaging",
         },
+        wizard: {
+          lastRunCommand: "onboard",
+          lastRunMode: "local",
+          lastRunVersion: "2026.3.2",
+        },
       };
+      const preMigrationTools = createOpenClawCodingTools({
+        config: legacyConfig,
+        sessionKey: "agent:main:main",
+        workspaceDir,
+        agentDir: "/tmp/agent-legacy-profile-before-migration",
+      });
+      expect(preMigrationTools.map((tool) => tool.name)).not.toContain("exec");
+
+      const migration = migrateLegacyConfig(legacyConfig);
+      expect(migration.config?.tools?.profile).toBe("coding");
 
       const tools = createOpenClawCodingTools({
-        config: cfg,
+        config: migration.config ?? legacyConfig,
         sessionKey: "agent:main:main",
         workspaceDir,
         agentDir: "/tmp/agent-legacy-profile",

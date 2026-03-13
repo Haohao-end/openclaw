@@ -250,6 +250,11 @@ describe("legacy migrate local onboarding tools.profile", () => {
       tools: {
         profile: "messaging",
       },
+      wizard: {
+        lastRunCommand: "onboard",
+        lastRunMode: "local",
+        lastRunVersion: "2026.3.2",
+      },
     });
 
     expect(res.changes).toContain(
@@ -271,6 +276,35 @@ describe("legacy migrate local onboarding tools.profile", () => {
       tools: {
         profile: "messaging",
         alsoAllow: ["web_search"],
+      },
+      wizard: {
+        lastRunCommand: "onboard",
+        lastRunMode: "local",
+        lastRunVersion: "2026.3.2",
+      },
+    });
+
+    expect(res.config).toBeNull();
+    expect(res.changes).toEqual([]);
+  });
+
+  it("does not rewrite configs without legacy onboarding metadata", () => {
+    const res = migrateLegacyConfig({
+      gateway: {
+        mode: "local",
+      },
+      agents: {
+        defaults: {
+          workspace: "/tmp/workspace",
+        },
+      },
+      tools: {
+        profile: "messaging",
+      },
+      wizard: {
+        lastRunCommand: "configure",
+        lastRunMode: "local",
+        lastRunVersion: "2026.3.2",
       },
     });
 

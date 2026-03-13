@@ -41,6 +41,7 @@ import {
   readConfigIncludeFileWithGuards,
   resolveConfigIncludes,
 } from "./includes.js";
+import { applyLegacyLocalOnboardingToolsProfileMigration } from "./legacy-local-tools-profile.js";
 import { findLegacyConfigIssues } from "./legacy.js";
 import { applyMergePatch } from "./merge-patch.js";
 import { normalizeExecSafeBinProfilesInConfig } from "./normalize-exec-safe-bin.js";
@@ -752,7 +753,11 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         resolveConfigIncludesForRead(parsed, configPath, deps),
         deps.env,
       );
-      const resolvedConfig = readResolution.resolvedConfigRaw;
+      const migratedLegacyLocalToolsProfileConfig = applyLegacyLocalOnboardingToolsProfileMigration(
+        readResolution.resolvedConfigRaw,
+      );
+      const resolvedConfig =
+        migratedLegacyLocalToolsProfileConfig ?? readResolution.resolvedConfigRaw;
       for (const w of readResolution.envWarnings) {
         deps.logger.warn(
           `Config (${configPath}): missing env var "${w.varName}" at ${w.configPath} — feature using this value will be unavailable`,
@@ -837,6 +842,7 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         () => pendingSecret ?? crypto.randomBytes(32).toString("hex"),
       );
       const cfgWithOwnerDisplaySecret = ownerDisplaySecretResolution.config;
+      const shouldPersistLegacyLocalToolsProfile = migratedLegacyLocalToolsProfileConfig !== null;
       if (ownerDisplaySecretResolution.generatedSecret) {
         AUTO_OWNER_DISPLAY_SECRET_BY_PATH.set(
           configPath,
@@ -844,10 +850,14 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         );
         if (!AUTO_OWNER_DISPLAY_SECRET_PERSIST_IN_FLIGHT.has(configPath)) {
           AUTO_OWNER_DISPLAY_SECRET_PERSIST_IN_FLIGHT.add(configPath);
-          void writeConfigFile(cfgWithOwnerDisplaySecret, { expectedConfigPath: configPath })
+          void writeConfigFile(cfgWithOwnerDisplaySecret, {
+            envSnapshotForRestore: readResolution.envSnapshotForRestore,
+            expectedConfigPath: configPath,
+          })
             .then(() => {
               AUTO_OWNER_DISPLAY_SECRET_BY_PATH.delete(configPath);
               AUTO_OWNER_DISPLAY_SECRET_PERSIST_WARNED.delete(configPath);
+              AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_WARNED.delete(configPath);
             })
             .catch((err) => {
               if (!AUTO_OWNER_DISPLAY_SECRET_PERSIST_WARNED.has(configPath)) {
@@ -864,6 +874,32 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
       } else {
         AUTO_OWNER_DISPLAY_SECRET_BY_PATH.delete(configPath);
         AUTO_OWNER_DISPLAY_SECRET_PERSIST_WARNED.delete(configPath);
+      }
+
+      if (shouldPersistLegacyLocalToolsProfile && !ownerDisplaySecretResolution.generatedSecret) {
+        if (!AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_IN_FLIGHT.has(configPath)) {
+          AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_IN_FLIGHT.add(configPath);
+          void writeConfigFile(cfgWithOwnerDisplaySecret, {
+            envSnapshotForRestore: readResolution.envSnapshotForRestore,
+            expectedConfigPath: configPath,
+          })
+            .then(() => {
+              AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_WARNED.delete(configPath);
+            })
+            .catch((err) => {
+              if (!AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_WARNED.has(configPath)) {
+                AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_WARNED.add(configPath);
+                deps.logger.warn(
+                  `Failed to persist migrated tools.profile for legacy local onboarding config at ${configPath}: ${String(err)}`,
+                );
+              }
+            })
+            .finally(() => {
+              AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_IN_FLIGHT.delete(configPath);
+            });
+        }
+      } else {
+        AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_WARNED.delete(configPath);
       }
 
       return applyConfigOverrides(cfgWithOwnerDisplaySecret);
@@ -1348,6 +1384,8 @@ const DEFAULT_CONFIG_CACHE_MS = 200;
 const AUTO_OWNER_DISPLAY_SECRET_BY_PATH = new Map<string, string>();
 const AUTO_OWNER_DISPLAY_SECRET_PERSIST_IN_FLIGHT = new Set<string>();
 const AUTO_OWNER_DISPLAY_SECRET_PERSIST_WARNED = new Set<string>();
+const AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_IN_FLIGHT = new Set<string>();
+const AUTO_LEGACY_LOCAL_TOOLS_PROFILE_PERSIST_WARNED = new Set<string>();
 let configCache: {
   configPath: string;
   expiresAt: number;

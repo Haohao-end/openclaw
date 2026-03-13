@@ -166,4 +166,74 @@ describe("config io paths", () => {
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("- gateway.port:"));
     });
   });
+
+  it("migrates legacy local onboarding messaging profiles during loadConfig and persists the fix", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".openclaw");
+      await fs.mkdir(configDir, { recursive: true });
+      const configPath = path.join(configDir, "openclaw.json");
+      await fs.writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            gateway: { mode: "local" },
+            agents: { defaults: { workspace: "/tmp/workspace" } },
+            tools: { profile: "messaging" },
+            wizard: {
+              lastRunCommand: "onboard",
+              lastRunMode: "local",
+              lastRunVersion: "2026.3.2",
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const io = createIoForHome(home);
+      expect(io.loadConfig().tools?.profile).toBe("coding");
+
+      await expect
+        .poll(async () => {
+          const raw = await fs.readFile(configPath, "utf-8");
+          return (JSON.parse(raw) as { tools?: { profile?: string } }).tools?.profile;
+        })
+        .toBe("coding");
+    });
+  });
+
+  it("keeps explicit messaging profiles unchanged when tools were customized after onboarding", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".openclaw");
+      await fs.mkdir(configDir, { recursive: true });
+      const configPath = path.join(configDir, "openclaw.json");
+      await fs.writeFile(
+        configPath,
+        JSON.stringify(
+          {
+            gateway: { mode: "local" },
+            agents: { defaults: { workspace: "/tmp/workspace" } },
+            tools: { profile: "messaging", alsoAllow: ["web_search"] },
+            wizard: {
+              lastRunCommand: "onboard",
+              lastRunMode: "local",
+              lastRunVersion: "2026.3.2",
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const io = createIoForHome(home);
+      expect(io.loadConfig().tools?.profile).toBe("messaging");
+
+      const raw = await fs.readFile(configPath, "utf-8");
+      expect((JSON.parse(raw) as { tools?: { profile?: string } }).tools?.profile).toBe(
+        "messaging",
+      );
+    });
+  });
 });

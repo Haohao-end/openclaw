@@ -218,41 +218,30 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
 });
 
 describe("resolveEffectiveToolPolicy", () => {
-  it("treats legacy local onboarding messaging profile as coding", () => {
+  it("uses the explicit global tools.profile", () => {
     const cfg = {
-      gateway: {
-        mode: "local",
-      },
-      agents: {
-        defaults: {
-          workspace: "/tmp/workspace",
-        },
-      },
       tools: {
         profile: "messaging",
-      },
-    } as OpenClawConfig;
-    const result = resolveEffectiveToolPolicy({ config: cfg });
-    expect(result.profile).toBe("coding");
-  });
-
-  it("keeps explicit messaging profiles when other tool policy is configured", () => {
-    const cfg = {
-      gateway: {
-        mode: "local",
-      },
-      agents: {
-        defaults: {
-          workspace: "/tmp/workspace",
-        },
-      },
-      tools: {
-        profile: "messaging",
-        alsoAllow: ["web_search"],
       },
     } as OpenClawConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
     expect(result.profile).toBe("messaging");
+  });
+
+  it("prefers the agent-specific tools.profile over the global profile", () => {
+    const cfg = {
+      agents: {
+        list: [{ id: "helper", tools: { profile: "minimal" } }],
+      },
+      tools: {
+        profile: "messaging",
+      },
+    } as OpenClawConfig;
+    const result = resolveEffectiveToolPolicy({
+      config: cfg,
+      sessionKey: "agent:helper:main",
+    });
+    expect(result.profile).toBe("minimal");
   });
 
   it("implicitly re-exposes exec and process when tools.exec is configured", () => {

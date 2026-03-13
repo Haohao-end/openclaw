@@ -2,7 +2,6 @@ import { getChannelDock } from "../channels/dock.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveChannelGroupToolsPolicy } from "../config/group-policy.js";
-import { resolveLegacyLocalOnboardingToolsProfile } from "../config/legacy-local-tools-profile.js";
 import type { AgentToolsConfig } from "../config/types.tools.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { resolveThreadParentSessionKey } from "../sessions/session-key-utils.js";
@@ -285,9 +284,7 @@ export function resolveEffectiveToolPolicy(params: {
   const agentTools = agentConfig?.tools;
   const globalTools = params.config?.tools;
 
-  const profile =
-    agentTools?.profile ??
-    resolveLegacyLocalOnboardingToolsProfile(params.config, globalTools?.profile);
+  const profile = agentTools?.profile ?? globalTools?.profile;
   const providerPolicy = resolveProviderToolPolicy({
     byProvider: globalTools?.byProvider,
     modelProvider: params.modelProvider,
